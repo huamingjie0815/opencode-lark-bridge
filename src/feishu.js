@@ -181,6 +181,69 @@ async function stop() {
 }
 
 /**
+ * Send typing status to Feishu chat
+ * @param {string} chatId - Chat ID to send typing status to
+ * @returns {Promise<object>} Response from Feishu API
+ */
+async function sendTypingStatus(chatId) {
+  if (!chatId) {
+    throw new Error('chatId is required');
+  }
+
+  if (!appId || !appSecret) {
+    throw new Error('Feishu connection not started. Call start() first.');
+  }
+
+  // 飞书正在输入状态 API
+  const url = `https://open.feishu.cn/open-apis/im/v1/messages/typing`;
+
+  const body = {
+    chat_id: chatId,
+    type: 'typing'
+  };
+
+  try {
+    const { default: axios } = await import('axios');
+
+    // Get tenant access token
+    const tokenResponse = await axios.post(
+      'https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal',
+      {
+        app_id: appId,
+        app_secret: appSecret
+      }
+    );
+
+    if (tokenResponse.data.code !== 0) {
+      throw new Error(`Failed to get access token: ${tokenResponse.data.msg}`);
+    }
+
+    const accessToken = tokenResponse.data.tenant_access_token;
+
+    console.log('[Feishu DEBUG] Sending typing status:', { chatId });
+    
+    const response = await axios.post(url, body, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log('[Feishu DEBUG] Typing status sent successfully:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('[Feishu DEBUG] Send typing status failed:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      chatId
+    });
+    // 打字状态失败不应该阻塞主流程，只记录错误
+    return null;
+  }
+}
+
+/**
  * Send text message to Feishu chat via REST API
  * @param {string} chatId - Chat ID to send message to
  * @param {string} text - Text content to send
@@ -320,6 +383,7 @@ export {
   start,
   stop,
   sendMessage,
+  sendTypingStatus,
   on,
   off,
   isConnected
@@ -330,6 +394,7 @@ export default {
   start,
   stop,
   sendMessage,
+  sendTypingStatus,
   on,
   off,
   isConnected

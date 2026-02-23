@@ -459,9 +459,16 @@
                     addLog('桥接已启动', 'success');
                     startPolling();
                 } else {
-                    const errorData = await response.json();
-                    // 后端返回的格式是 { success: false, error: error.message }
-                    const errorMsg = errorData.error || errorData.message || '启动失败';
+                    let errorMsg = '启动失败';
+                    try {
+                        const errorData = await response.json();
+                        // 后端返回的格式是 { success: false, error: error.message }
+                        errorMsg = errorData.error || errorData.message || '启动失败';
+                    } catch (parseError) {
+                        // 如果 JSON 解析失败，获取原始响应文本
+                        const text = await response.text();
+                        errorMsg = text || `HTTP ${response.status}: ${response.statusText}`;
+                    }
                     throw new Error(errorMsg);
                 }
             } catch (error) {

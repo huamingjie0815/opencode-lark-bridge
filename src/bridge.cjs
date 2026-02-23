@@ -41,6 +41,102 @@ const processedMessageIds = new Set();
 const MAX_STORED_MESSAGE_IDS = 1000;
 const MESSAGE_ID_RETENTION_MS = 5 * 60 * 1000; // 5 minutes
 
+// OpenCode session status polling
+const sessionStatusMap = new Map(); // sessionId -> { status, lastUpdate, messageCount }
+const SESSION_STATUS_POLLING_INTERVAL = 3000; // 3 seconds
+const SESSION_STATUS_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+let sessionStatusPollingInterval = null;
+
+// Session status polling functions
+async function pollSessionStatus() {
+  for (const [sessionId, statusInfo] of sessionStatusMap.entries()) {
+    try {
+      // Check if session has timed out
+      if (Date.now() - statusInfo.lastUpdate > SESSION_STATUS_TIMEOUT) {
+        sessionStatusMap.delete(sessionId);
+        if (logger) logger('info', `Session ${sessionId} timed out and removed from polling`);
+        continue;
+      }
+
+      // Get session status from OpenCode
+      const status = await opencode.getSessionStatus(sessionId);
+      
+      // Update status in map
+      statusInfo.status = status;
+      statusInfo.lastUpdate = Date.now();
+      
+      // Send status update to Feishu
+      await sendStatusToFeishu(sessionId, status);
+      
+    } catch (error) {
+      if (logger) logger('error', `Failed to poll status for session ${sessionId}: ${error.message}`);
+    }
+  }
+}
+
+async function sendStatusToFeishu(sessionId, status) {
+  // Find chatId for this session
+  let targetChatId = null;
+  for (const [chatId, sid] of chatIdToSessionMap.entries()) {
+    if (sid === sessionId) {
+      targetChatId = chatId;
+      break;
+    }
+  }
+  
+  if (!targetChatId) {
+    if (logger) logger('warn', `No chat found for session ${sessionId}, skipping status update`);
+    return;
+  }
+  
+  // Format status message
+  let statusText = '';
+  switch (status.type) {
+    case 'thinking':
+      statusText = '🤔 正在思考中...';
+      break;
+    case 'tool_call':
+      statusText = `🔧 正在使用工具: ${status.toolName || '未知工具'}`;
+      break;
+    case 'generating':
+      statusText = '✍️ 正在生成回复...';
+      break;
+    case 'completed':
+      statusText = '✅ 处理完成';
+      break;
+    case 'error':
+      statusText = `❌ 处理出错: ${status.error || '未知错误'}`;
+      break;
+    default:
+      statusText = `⏳ 状态: ${status.type || '未知'}`;
+  }
+  
+  try {
+    // Send status as a temporary message that will be updated
+    await feishu.sendMessage(targetChatId, statusText);
+    if (logger) logger('info', `Sent status update to Feishu chat ${targetChatId}: ${statusText}`);
+  } catch (error) {
+    if (logger) logger('error', `Failed to send status to Feishu: ${error.message}`);
+  }
+}
+
+function startSessionStatusPolling() {
+  if (sessionStatusPollingInterval) {
+    return; // Already running
+  }
+  
+  sessionStatusPollingInterval = setInterval(pollSessionStatus, SESSION_STATUS_POLLING_INTERVAL);
+  if (logger) logger('info', 'Started session status polling');
+}
+
+function stopSessionStatusPolling() {
+  if (sessionStatusPollingInterval) {
+    clearInterval(sessionStatusPollingInterval);
+    sessionStatusPollingInterval = null;
+    if (logger) logger('info', 'Stopped session status polling');
+  }
+}
+
 // Logger function (injected from index.js)
 let logger = null;
 
@@ -177,6 +273,17 @@ async function handleFeishuToOpenCode(message) {
     }
 
     if (logger) logger('info', `Feishu → OpenCode: ${text.substring(0, 100)}...`, { chatId, userId });
+
+    // 发送"正在输入"状态到飞书
+    try {
+      if (feishu.sendTypingStatus) {
+        await feishu.sendTypingStatus(chatId);
+        if (logger) logger('info', `Sent typing status to Feishu chat ${chatId}`);
+      }
+    } catch (typingError) {
+      // 打字状态发送失败不应该阻塞主流程
+      if (logger) logger('warn', `Failed to send typing status: ${typingError.message}`);
+    }
 
     if (!chatIdToSessionMap.has(chatId)) {
       try {
