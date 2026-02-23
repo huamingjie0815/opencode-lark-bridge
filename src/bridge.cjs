@@ -9,6 +9,7 @@
  */
 
 const { EventEmitter } = require('events');
+const net = require('net');
 const opencode = require('./opencode.cjs');
 const feishuModule = require('./feishu.js');
 const feishu = feishuModule.default || feishuModule;
@@ -35,6 +36,11 @@ let opencodeConnected = false;
 let sessionId = null;
 let chatIdToSessionMap = new Map();
 
+// Message deduplication
+const processedMessageIds = new Set();
+const MAX_STORED_MESSAGE_IDS = 1000;
+const MESSAGE_ID_RETENTION_MS = 5 * 60 * 1000; // 5 minutes
+
 // Logger function (injected from index.js)
 let logger = null;
 
@@ -46,6 +52,22 @@ const eventHandlers = {
   message: [],
   statusChange: [],
   error: []
+};
+
+// Store handler references for proper cleanup
+const handlerReferences = {
+  feishu: {
+    message: null,
+    connected: null,
+    disconnected: null,
+    error: null
+  },
+  opencode: {
+    message: null,
+    connected: null,
+    disconnected: null,
+    error: null
+  }
 };
 
 /**
@@ -128,9 +150,31 @@ function updateConnectionStatus() {
  * ============================================
  */
 
+function isDuplicateMessage(messageId) {
+  if (!messageId) return false;
+  
+  if (processedMessageIds.has(messageId)) {
+    return true;
+  }
+  
+  processedMessageIds.add(messageId);
+  
+  if (processedMessageIds.size > MAX_STORED_MESSAGE_IDS) {
+    const iterator = processedMessageIds.values();
+    processedMessageIds.delete(iterator.next().value);
+  }
+  
+  return false;
+}
+
 async function handleFeishuToOpenCode(message) {
   try {
     const { chatId, text, userId, messageId, isMentioned } = message;
+
+    if (messageId && isDuplicateMessage(messageId)) {
+      if (logger) logger('warn', `Duplicate message ${messageId} skipped`);
+      return;
+    }
 
     if (logger) logger('info', `Feishu → OpenCode: ${text.substring(0, 100)}...`, { chatId, userId });
 
@@ -187,8 +231,52 @@ async function handleFeishuToOpenCode(message) {
   }
 }
 
+// Track processed OpenCode message IDs to prevent duplicates
+const processedOpenCodeMessageIds = new Set();
+const MAX_STORED_OPENCODE_MESSAGE_IDS = 1000;
+
+function isDuplicateOpenCodeMessage(message) {
+  // Generate a unique key based on message content and timestamp
+  let messageKey = null;
+  
+  if (typeof message === 'string') {
+    messageKey = `str:${message}`;
+  } else if (message && message.content) {
+    messageKey = `content:${message.content}`;
+  } else if (message && message.text) {
+    messageKey = `text:${message.text}`;
+  } else if (message && message.parts && Array.isArray(message.parts)) {
+    const textParts = message.parts
+      .filter(part => part.type === 'text' && part.text)
+      .map(part => part.text);
+    messageKey = `parts:${textParts.join('')}`;
+  }
+  
+  if (!messageKey) return false;
+  
+  if (processedOpenCodeMessageIds.has(messageKey)) {
+    return true;
+  }
+  
+  processedOpenCodeMessageIds.add(messageKey);
+  
+  // Limit the size of the Set
+  if (processedOpenCodeMessageIds.size > MAX_STORED_OPENCODE_MESSAGE_IDS) {
+    const iterator = processedOpenCodeMessageIds.values();
+    processedOpenCodeMessageIds.delete(iterator.next().value);
+  }
+  
+  return false;
+}
+
 async function handleOpenCodeToFeishu(message) {
   try {
+    // Check for duplicate OpenCode messages
+    if (isDuplicateOpenCodeMessage(message)) {
+      if (logger) logger('warn', 'Duplicate OpenCode message skipped');
+      return;
+    }
+
     let text = '';
     let sessionIdFromMsg = null;
 
@@ -303,6 +391,19 @@ async function processQueue() {
  * ============================================
  */
 
+// Helper function to check if a port is in use
+function checkPortInUse(host, port) {
+  return new Promise((resolve) => {
+    const tester = net.createConnection({ host, port }, () => {
+      tester.destroy();
+      resolve(true); // Port is in use
+    });
+    tester.on('error', () => {
+      resolve(false); // Port is free
+    });
+  });
+}
+
 async function start(config) {
   if (!config) {
     throw new Error('Config is required');
@@ -331,39 +432,63 @@ async function start(config) {
   
   if (logger) logger('info', 'Initializing bridge...');
 
+  // Check if the opencode port is already in use
+  const { host = 'localhost', port } = config.opencode;
+  if (port) {
+    const isPortInUse = await checkPortInUse(host, port);
+    if (isPortInUse) {
+      const errorMsg = `Port ${port} is already in use. There might be a previous opencode process running. Please stop it manually or use a different port.`;
+      if (logger) logger('error', errorMsg);
+      setStatus(STATUS.ERROR, errorMsg);
+      throw new Error(errorMsg);
+    }
+  }
+
   return new Promise(async (resolve, reject) => {
     try {
-      feishu.on('message', handleFeishuToOpenCode);
-      feishu.on('connected', () => {
+      // Store handler references for cleanup
+      handlerReferences.feishu.message = handleFeishuToOpenCode;
+      handlerReferences.feishu.connected = () => {
         feishuConnected = true;
         if (logger) logger('success', 'Feishu connected');
         updateConnectionStatus();
-      });
-      feishu.on('disconnected', () => {
+      };
+      handlerReferences.feishu.disconnected = () => {
         feishuConnected = false;
         if (logger) logger('warn', 'Feishu disconnected');
         updateConnectionStatus();
-      });
-      feishu.on('error', (error) => {
+      };
+      handlerReferences.feishu.error = (error) => {
         if (logger) logger('error', 'Feishu error:', error.message);
         emitEvent('error', { source: 'feishu', error });
-      });
+      };
 
-      opencode.on('message', handleOpenCodeToFeishu);
-      opencode.on('connected', () => {
+      handlerReferences.opencode.message = handleOpenCodeToFeishu;
+      handlerReferences.opencode.connected = () => {
         opencodeConnected = true;
         if (logger) logger('success', 'OpenCode connected');
         updateConnectionStatus();
-      });
-      opencode.on('disconnected', () => {
+      };
+      handlerReferences.opencode.disconnected = () => {
         opencodeConnected = false;
         if (logger) logger('warn', 'OpenCode disconnected');
         updateConnectionStatus();
-      });
-      opencode.on('error', (error) => {
+      };
+      handlerReferences.opencode.error = (error) => {
         if (logger) logger('error', 'OpenCode error:', error.message);
         emitEvent('error', { source: 'opencode', error });
-      });
+      };
+
+      // Register handlers
+      feishu.on('message', handlerReferences.feishu.message);
+      feishu.on('connected', handlerReferences.feishu.connected);
+      feishu.on('disconnected', handlerReferences.feishu.disconnected);
+      feishu.on('error', handlerReferences.feishu.error);
+
+      opencode.on('message', handlerReferences.opencode.message);
+      opencode.on('connected', handlerReferences.opencode.connected);
+      opencode.on('disconnected', handlerReferences.opencode.disconnected);
+      opencode.on('error', handlerReferences.opencode.error);
 
       if (logger) logger('info', 'Starting Feishu connection...');
       await feishu.start(config.feishu.appId, config.feishu.appSecret);
@@ -427,6 +552,41 @@ async function stop() {
     opencodeConnected = false;
   }
   
+  // Remove all registered event handlers from feishu and opencode
+  if (handlerReferences.feishu.message) {
+    feishu.off('message', handlerReferences.feishu.message);
+    handlerReferences.feishu.message = null;
+  }
+  if (handlerReferences.feishu.connected) {
+    feishu.off('connected', handlerReferences.feishu.connected);
+    handlerReferences.feishu.connected = null;
+  }
+  if (handlerReferences.feishu.disconnected) {
+    feishu.off('disconnected', handlerReferences.feishu.disconnected);
+    handlerReferences.feishu.disconnected = null;
+  }
+  if (handlerReferences.feishu.error) {
+    feishu.off('error', handlerReferences.feishu.error);
+    handlerReferences.feishu.error = null;
+  }
+
+  if (handlerReferences.opencode.message) {
+    opencode.off('message', handlerReferences.opencode.message);
+    handlerReferences.opencode.message = null;
+  }
+  if (handlerReferences.opencode.connected) {
+    opencode.off('connected', handlerReferences.opencode.connected);
+    handlerReferences.opencode.connected = null;
+  }
+  if (handlerReferences.opencode.disconnected) {
+    opencode.off('disconnected', handlerReferences.opencode.disconnected);
+    handlerReferences.opencode.disconnected = null;
+  }
+  if (handlerReferences.opencode.error) {
+    opencode.off('error', handlerReferences.opencode.error);
+    handlerReferences.opencode.error = null;
+  }
+
   eventEmitter.removeAllListeners();
   
   for (const event in eventHandlers) {

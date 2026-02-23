@@ -459,8 +459,10 @@
                     addLog('桥接已启动', 'success');
                     startPolling();
                 } else {
-                    const error = await response.json();
-                    throw new Error(error.message || '启动失败');
+                    const errorData = await response.json();
+                    // 后端返回的格式是 { success: false, error: error.message }
+                    const errorMsg = errorData.error || errorData.message || '启动失败';
+                    throw new Error(errorMsg);
                 }
             } catch (error) {
                 showToast('桥接启动失败', 'error');
