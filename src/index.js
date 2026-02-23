@@ -208,6 +208,117 @@ app.post('/api/stop', async (req, res) => {
   }
 });
 
+// POST /api/kill-opencode - Kill opencode process by port
+app.post('/api/kill-opencode', async (req, res) => {
+  try {
+    const { port } = req.body;
+    const targetPort = parseInt(port);
+
+    if (!port || isNaN(targetPort)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid port number'
+      });
+    }
+
+    // Prevent killing the bridge server itself
+    if (targetPort === PORT) {
+      addLog('warn', `Attempted to kill bridge server port ${PORT} - operation blocked`);
+      return res.status(403).json({
+        success: false,
+        error: `Cannot kill the bridge server port ${PORT}`
+      });
+    }
+
+    addLog('info', `Attempting to kill opencode process on port ${port}`);
+
+    // Find and kill process using the port
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+
+    let killed = false;
+    let processInfo = '';
+
+    try {
+      const platform = process.platform;
+
+      if (platform === 'darwin' || platform === 'linux') {
+        // macOS/Linux: Find PID by port and check process name
+        const { stdout } = await execAsync(`lsof -ti:${port} || echo ''`);
+        const pids = stdout.trim().split('\n').filter(pid => pid);
+        
+        for (const pid of pids) {
+          try {
+            const { stdout: cmdStdout } = await execAsync(`ps -p ${pid} -o comm= 2>/dev/null || echo ''`);
+            const processName = cmdStdout.trim();
+            
+            if (processName && processName.toLowerCase().includes('opencode')) {
+              await execAsync(`kill -9 ${pid}`);
+              killed = true;
+              if (!processInfo) {
+                processInfo = `Found PIDs: `;
+              } else {
+                processInfo += ', ';
+              }
+              processInfo += `PID ${pid} (${processName})`;
+              addLog('info', `Killed opencode process: ${processName} (PID ${pid})`);
+            } else {
+              addLog('warn', `Skipped non-opencode process: ${processName || 'unknown'} (PID ${pid})`);
+            }
+          } catch (checkErr) {
+            addLog('warn', `Failed to check process ${pid}: ${checkErr.message}`);
+          }
+        }
+      } else if (platform === 'win32') {
+        // Windows: Find PID by port and kill
+        const { stdout } = await execAsync(`netstat -ano | findstr :${port} | findstr LISTENING`);
+        const lines = stdout.trim().split('\n').filter(line => line);
+
+        if (lines.length > 0) {
+          const pids = [...new Set(lines.map(line => line.trim().split(/\s+/).pop()))];
+          processInfo = `Found PIDs: ${pids.join(', ')}`;
+
+          for (const pid of pids) {
+            try {
+              await execAsync(`taskkill /F /PID ${pid}`);
+              killed = true;
+            } catch (killErr) {
+              addLog('warn', `Failed to kill PID ${pid}: ${killErr.message}`);
+            }
+          }
+        }
+      }
+    } catch (findErr) {
+      // No process found or command failed
+      processInfo = `No process found on port ${port}`;
+    }
+
+    if (killed) {
+      addLog('success', `Successfully killed opencode process on port ${port}. ${processInfo}`);
+      res.json({
+        success: true,
+        message: `Process on port ${port} killed successfully`,
+        details: processInfo
+      });
+    } else {
+      addLog('info', `No process found to kill on port ${port}`);
+      res.json({
+        success: true,
+        message: `No process found on port ${port}`,
+        details: processInfo
+      });
+    }
+  } catch (error) {
+    console.error('Failed to kill opencode process:', error);
+    addLog('error', 'Failed to kill opencode process: ' + error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Server error:', err);

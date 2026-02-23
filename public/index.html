@@ -141,6 +141,16 @@
             box-shadow: 0 4px 12px rgba(235, 51, 73, 0.4);
         }
 
+        .btn-warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(240, 147, 251, 0.4);
+        }
+
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -307,6 +317,24 @@
                 transform: rotate(360deg);
             }
         }
+
+        .kill-opencode-section {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+
+        .kill-opencode-section .form-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .kill-opencode-section .form-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
     </style>
 </head>
 <body>
@@ -362,6 +390,26 @@
                 <button class="btn btn-primary" id="saveConfigBtn" onclick="saveConfig()">
                     保存配置
                 </button>
+            </div>
+
+            <!-- Kill OpenCode Section -->
+            <div class="section kill-opencode-section">
+                <div class="section-title">
+                    <span>🔴</span>
+                    <span>进程管理</span>
+                </div>
+                <p style="margin-bottom: 16px; color: #666; font-size: 14px;">
+                    当 OpenCode 进程卡死或需要强制停止时，可通过端口结束进程。
+                </p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="killPort">OpenCode 端口</label>
+                        <input type="number" id="killPort" placeholder="例如: 8080" value="8080">
+                    </div>
+                    <button class="btn btn-warning" onclick="killOpenCode()">
+                        结束进程
+                    </button>
+                </div>
             </div>
 
             <!-- Log Section -->
@@ -436,6 +484,45 @@
             }
         }
 
+        async function killOpenCode() {
+            const port = document.getElementById('killPort').value;
+            
+            if (!port || isNaN(parseInt(port))) {
+                showToast('请输入有效的端口号', 'error');
+                return;
+            }
+
+            if (!confirm(`确定要结束 OpenCode 进程吗？这将终止占用端口 ${port} 的所有进程。`)) {
+                return;
+            }
+
+            try {
+                addLog(`正在尝试结束端口 ${port} 上的 OpenCode 进程...`, 'info');
+                const response = await fetch('/api/kill-opencode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ port: parseInt(port) })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    if (data.details && data.details.includes('Found PIDs')) {
+                        showToast('进程已结束', 'success');
+                        addLog(`成功结束进程: ${data.details}`, 'success');
+                    } else {
+                        showToast('未找到进程', 'info');
+                        addLog(`端口 ${port} 上没有找到 OpenCode 进程`, 'info');
+                    }
+                } else {
+                    throw new Error(data.error || '结束进程失败');
+                }
+            } catch (error) {
+                showToast('结束进程失败', 'error');
+                addLog('结束 OpenCode 进程失败: ' + error.message, 'error');
+            }
+        }
+
         async function getStatus() {
             try {
                 const response = await fetch('/api/status');
@@ -462,10 +549,8 @@
                     let errorMsg = '启动失败';
                     try {
                         const errorData = await response.json();
-                        // 后端返回的格式是 { success: false, error: error.message }
                         errorMsg = errorData.error || errorData.message || '启动失败';
                     } catch (parseError) {
-                        // 如果 JSON 解析失败，获取原始响应文本
                         const text = await response.text();
                         errorMsg = text || `HTTP ${response.status}: ${response.statusText}`;
                     }
