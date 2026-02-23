@@ -1,0 +1,29 @@
+=== Config Validation Tests ===
+
+Test 1: Valid config
+Valid: true | Errors: 0
+Expected: true, 0
+✓ PASS
+
+Test 2: Missing feishuAppId
+Valid: false | Errors: [ 'feishuAppId is required and must be a non-empty string' ]
+Expected: false, [feishuAppId error]
+✓ PASS
+
+Test 3: Missing feishuAppSecret
+Valid: false | Errors: [ 'feishuAppSecret is required and must be a non-empty string' ]
+✓ PASS
+
+Test 4: Missing workDir
+Valid: false | Errors: [ 'workDir is required and must be a non-empty string' ]
+✓ PASS
+
+Test 5: Invalid bridgePort (0)
+Valid: false | Errors: [ 'bridgePort must be a number between 1 and 65535' ]
+✓ PASS
+
+Test 6: Null config
+Valid: false | Errors: [ 'Config is null or undefined' ]
+✓ PASS
+
+=== All Validation Tests Complete ===

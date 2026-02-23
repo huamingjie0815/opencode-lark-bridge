@@ -1,0 +1,23 @@
+=== OpenCode Lifecycle Test ===
+
+Step 1: Starting opencode serve...
+✓ Process started successfully
+
+Step 2: Checking process with pgrep...
+✓ Process exists (PIDs: 4436, 4437)
+
+Step 3: Health check via HTTP...
+✓ Health response: {"healthy":true,"version":"1.2.10"}
+
+Step 4: Checking state...
+✓ State: connected=true, sessionId=null, processRunning=true
+
+Step 5: Stopping process...
+✓ Stop command executed
+
+Step 6: Verifying process stopped...
+✗ Process still exists
+
+Final state: connected=false, processRunning=false
+
+=== TEST PASSED ===

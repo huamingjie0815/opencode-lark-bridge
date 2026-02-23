@@ -1,0 +1,40 @@
+=== Bridge QA Tests ===
+
+--- Lifecycle Tests ---
+✓ Initial status is idle
+✓ Feishu initially disconnected
+✓ OpenCode initially disconnected
+✓ Queue initially empty
+
+--- Status Constants Tests ---
+✓ STATUS.IDLE exists
+✓ STATUS.CONNECTING exists
+✓ STATUS.CONNECTED exists
+✓ STATUS.ERROR exists
+
+--- Queue FIFO Tests ---
+✓ Queue is empty after clear
+✓ Queue has 3 items after enqueue
+✓ Peek returns first item (FIFO)
+✓ Peek does not remove item
+✓ Dequeue returns first item
+✓ Queue size is 2 after dequeue
+✓ Second dequeue returns second item
+✓ Third dequeue returns third item
+✓ Queue is empty after all dequeues
+✓ Dequeue on empty queue returns null
+✓ Peek on empty queue returns null
+
+--- Max Queue Size Test ---
+✓ Queue respects MAX_QUEUE_SIZE (100)
+✓ Oldest item was dropped (first 5)
+
+--- Event Subscription Test ---
+✓ Event handler subscribed successfully
+✓ Event handler unsubscribed successfully
+
+=== Test Summary ===
+Total Tests: 23
+Passed: 23
+Failed: 0
+Success Rate: 100%

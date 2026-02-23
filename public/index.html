@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>飞书 ↔ OpenCode 桥接</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #667eea;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 6px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            background: white;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group input::placeholder {
+            color: #aaa;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(17, 153, 142, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(235, 51, 73, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .status-dot.idle {
+            background: #9ca3af;
+            box-shadow: 0 0 0 4px rgba(156, 163, 175, 0.2);
+        }
+
+        .status-dot.connecting {
+            background: #f59e0b;
+            box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
+            animation: pulse 1.5s infinite;
+        }
+
+        .status-dot.connected {
+            background: #10b981;
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2);
+        }
+
+        .status-dot.error {
+            background: #ef4444;
+            box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.5;
+                transform: scale(1.1);
+            }
+        }
+
+        .status-text {
+            font-weight: 500;
+            color: #374151;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .log-section {
+            margin-top: 20px;
+        }
+
+        .log-container {
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #d4d4d4;
+            height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .log-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .log-container::-webkit-scrollbar-track {
+            background: #2d2d2d;
+            border-radius: 4px;
+        }
+
+        .log-container::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 4px;
+        }
+
+        .log-entry {
+            margin-bottom: 4px;
+        }
+
+        .log-entry.info {
+            color: #4fc1ff;
+        }
+
+        .log-entry.success {
+            color: #4ec9b0;
+        }
+
+        .log-entry.warn {
+            color: #ffcc00;
+        }
+
+        .log-entry.error {
+            color: #f48771;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast.success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .toast.error {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>飞书 ↔ OpenCode 桥接</h1>
+            <p>连接飞书消息与 OpenCode 开发环境</p>
+        </div>
+
+        <div class="content">
+            <!-- Status Bar -->
+            <div class="status-bar">
+                <div class="status-indicator">
+                    <div class="status-dot idle" id="statusDot"></div>
+                    <span class="status-text" id="statusText">未连接</span>
+                </div>
+                <div class="control-buttons">
+                    <button class="btn btn-success" id="startBtn" onclick="startBridge()">
+                        启动桥接
+                    </button>
+                    <button class="btn btn-danger" id="stopBtn" onclick="stopBridge()" disabled>
+                        停止桥接
+                    </button>
+                </div>
+            </div>
+
+            <!-- Configuration Form -->
+            <div class="section">
+                <div class="section-title">
+                    <span>⚙️</span>
+                    <span>配置设置</span>
+                </div>
+                <div class="form-group">
+                    <label for="feishuAppId">飞书 App ID</label>
+                    <input type="text" id="feishuAppId" placeholder="cli_xxxxxxxxxxxxxxxx">
+                </div>
+                <div class="form-group">
+                    <label for="feishuAppSecret">飞书 App Secret</label>
+                    <input type="password" id="feishuAppSecret" placeholder="输入 App Secret">
+                <div class="form-group">
+                    <label for="feishuChatId">飞书 Chat ID (群ID，用于双向通信)</label>
+                    <input type="text" id="feishuChatId" placeholder="oc_xxxxxxxx 或群ID">
+                </div>
+                </div>
+                <div class="form-group">
+                    <label for="workDir">工作目录 (OpenCode 工作区)</label>
+                    <input type="text" id="workDir" placeholder="/path/to/opencode/workspace">
+                </div>
+                <div class="form-group">
+                    <label for="bridgePort">桥接端口 (默认 3000)</label>
+                    <input type="number" id="bridgePort" placeholder="3000" value="3000">
+                </div>
+                <button class="btn btn-primary" id="saveConfigBtn" onclick="saveConfig()">
+                    保存配置
+                </button>
+            </div>
+
+            <!-- Log Section -->
+            <div class="section log-section">
+                <div class="section-title">
+                    <span>📝</span>
+                    <span>运行日志</span>
+                </div>
+                <div class="log-container" id="logContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // Global state
+        let currentStatus = 'idle';
+        let pollingInterval = null;
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConfig();
+            getStatus();
+            addLog('页面加载完成', 'info');
+        });
+
+        // API Functions
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                if (response.ok) {
+                    const config = await response.json();
+                    document.getElementById('feishuAppId').value = config.feishuAppId || '';
+                    document.getElementById('feishuAppSecret').value = config.feishuAppSecret || '';
+                    document.getElementById('feishuChatId').value = config.feishuChatId || '';
+                    document.getElementById('workDir').value = config.workDir || '';
+                    document.getElementById('bridgePort').value = config.bridgePort || '3000';
+                    addLog('配置已加载', 'success');
+                }
+            } catch (error) {
+                addLog('加载配置失败: ' + error.message, 'error');
+            }
+        }
+
+        async function saveConfig() {
+            const config = {
+                feishuAppId: document.getElementById('feishuAppId').value,
+                feishuAppSecret: document.getElementById('feishuAppSecret').value,
+                feishuChatId: document.getElementById('feishuChatId').value,
+                workDir: document.getElementById('workDir').value,
+                bridgePort: document.getElementById('bridgePort').value
+            };
+
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                if (response.ok) {
+                    showToast('配置保存成功', 'success');
+                    addLog('配置已保存', 'success');
+                } else {
+                    throw new Error('保存失败');
+                }
+            } catch (error) {
+                showToast('配置保存失败', 'error');
+                addLog('保存配置失败: ' + error.message, 'error');
+            }
+        }
+
+        async function getStatus() {
+            try {
+                const response = await fetch('/api/status');
+                if (response.ok) {
+                    const data = await response.json();
+                    updateStatus(data.status);
+                }
+            } catch (error) {
+                updateStatus('error');
+            }
+        }
+
+        async function startBridge() {
+            try {
+                const response = await fetch('/api/start', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    showToast('桥接启动成功', 'success');
+                    addLog('桥接已启动', 'success');
+                    startPolling();
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.message || '启动失败');
+                }
+            } catch (error) {
+                showToast('桥接启动失败', 'error');
+                addLog('启动桥接失败: ' + error.message, 'error');
+            }
+        }
+
+        async function stopBridge() {
+            try {
+                const response = await fetch('/api/stop', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    showToast('桥接已停止', 'success');
+                    addLog('桥接已停止', 'info');
+                    stopPolling();
+                    updateStatus('idle');
+                } else {
+                    throw new Error('停止失败');
+                }
+            } catch (error) {
+                showToast('桥接停止失败', 'error');
+                addLog('停止桥接失败: ' + error.message, 'error');
+            }
+        }
+
+        // UI Update Functions
+        function updateStatus(status) {
+            currentStatus = status;
+            const dot = document.getElementById('statusDot');
+            const text = document.getElementById('statusText');
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+
+            // Remove all status classes
+            dot.classList.remove('idle', 'connecting', 'connected', 'error');
+
+            switch (status) {
+                case 'idle':
+                    dot.classList.add('idle');
+                    text.textContent = '未连接';
+                    startBtn.disabled = false;
+                    stopBtn.disabled = true;
+                    break;
+                case 'connecting':
+                    dot.classList.add('connecting');
+                    text.textContent = '连接中...';
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    break;
+                case 'connected':
+                    dot.classList.add('connected');
+                    text.textContent = '已连接';
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    break;
+                case 'error':
+                    dot.classList.add('error');
+                    text.textContent = '连接错误';
+                    startBtn.disabled = false;
+                    stopBtn.disabled = true;
+                    break;
+            }
+        }
+
+        function addLog(message, type = 'info') {
+            const container = document.getElementById('logContainer');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString('zh-CN');
+            entry.textContent = `[${timestamp}] ${message}`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        function startPolling() {
+            if (pollingInterval) return;
+            pollingInterval = setInterval(getStatus, 2000);
+        }
+
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+        }
+    </script>
+</body>
+</html>

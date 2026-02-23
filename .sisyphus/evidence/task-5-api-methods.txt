@@ -1,0 +1,12 @@
+✓ start is function
+✓ stop is function
+✓ createSession is function
+✓ sendMessage is function
+✓ on is function
+✓ off is function
+✓ getEventStream is function
+✓ getState is function
+✓ OpenCodeClient is function
+✓ _client is object
+
+All API methods present!
