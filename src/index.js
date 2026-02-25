@@ -62,7 +62,9 @@ app.get('/api/status', (req, res) => {
 
 // GET /api/config - Return current config
 app.get('/api/config', (req, res) => {
-  const config = loadConfig();
+  // 如果请求中有 workDir 参数，使用它加载配置
+  const workDir = req.query.workDir;
+  const config = loadConfig(workDir);
   res.json(config || bridgeConfig);
 });
 
@@ -78,8 +80,16 @@ app.post('/api/config', async (req, res) => {
       });
     }
     
-    // Save to file
-    const success = saveConfig(newConfig);
+    // Save to workDir if specified, otherwise use config.workDir
+    const targetWorkDir = newConfig.workDir;
+    if (!targetWorkDir) {
+      return res.status(400).json({
+        success: false,
+        error: 'workDir is required'
+      });
+    }
+    
+    const success = saveConfig(newConfig, targetWorkDir);
     if (!success) {
       return res.status(500).json({ 
         success: false, 
