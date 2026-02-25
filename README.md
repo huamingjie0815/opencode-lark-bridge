@@ -1,11 +1,11 @@
-# 飞书 ↔ OpenCode 桥接工具
+# OpenCode ↔ Lark 桥接工具
 
-**Feishu-OpenCode Bridge**
+**OpenCode-Lark Bridge**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
 
-连接飞书(Feishu/Lark)与 OpenCode AI 开发环境的桥接工具。通过 WebSocket 实时接收飞书消息，转发至 OpenCode 处理后将响应返回飞书。
+连接 Lark (飞书) 与 OpenCode AI 开发环境的桥接工具。通过 WebSocket 实时接收飞书消息，转发至 OpenCode 处理后将响应返回飞书。
 
 [English Version](./README_EN.md)
 
@@ -21,14 +21,44 @@
 
 ---
 
+## 安装
+
+```bash
+# 全局安装
+npm install -g opencode-lark-bridge
+
+# 或使用 npx
+npx opencode-lark-bridge <command>
+```
+
+---
+
+## CLI 命令
+
+| 命令 | 说明 |
+|------|------|
+| `oclb start` | 启动桥接服务 |
+| `oclb start --daemon` | 后台启动服务 |
+| `oclb stop` | 停止桥接服务 |
+| `oclb status` | 查看服务状态 |
+| `oclb logs` | 查看日志 |
+| `oclb logs -f` | 实时跟踪日志 |
+| `oclb init` | 初始化配置文件 |
+| `oclb --help` | 查看帮助 |
+
+---
+
 ## 快速开始
 
 ```bash
-# 安装依赖
-npm install
+# 初始化配置（交互式）
+oclb init
 
 # 启动服务
-npm start
+oclb start
+
+# 或以后台模式启动
+oclb start --daemon
 
 # 访问 Web 界面
 open http://localhost:3000
@@ -44,6 +74,7 @@ open http://localhost:3000
 | `feishuAppSecret` | 飞书应用密钥 | 是 | `xxx` |
 | `workDir` | OpenCode 工作目录，**配置将保存在此目录下** | 是 | `/path/to/workspace` |
 | `bridgePort` | Web 服务端口 | 否 | `3000` |
+
 > **重要变更**: 配置文件现在保存在 **工作目录** 下（`{workDir}/.config.json`），每个工作区拥有独立配置。
 
 ---
@@ -63,18 +94,18 @@ open http://localhost:3000
 
 ```
 ┌─────────────────┐      WebSocket       ┌──────────────────┐      HTTP/SSE       ┌─────────────────┐
-│   Feishu App    │ ◄──────────────────► │  Bridge Server   │ ◄──────────────────► │   OpenCode      │
+│   Lark App      │ ◄──────────────────► │  Bridge Server   │ ◄──────────────────► │   OpenCode      │
 └─────────────────┘                      └──────────────────┘                      └─────────────────┘
-                                                  │
-                                                  ▼
-                                         ┌──────────────────┐
-                                         │   Web UI (3000)  │
-                                         └──────────────────┘
+                                              │
+                                              ▼
+                                     ┌──────────────────┐
+                                     │   Web UI (3000)  │
+                                     └──────────────────┘
 ```
 
 **数据流向**:
 1. 飞书 → WebSocket → Bridge → OpenCode
-2. OpenCode → SSE/HTTP → Bridge → Feishu API
+2. OpenCode → SSE/HTTP → Bridge → Lark API
 
 ---
 
@@ -94,27 +125,11 @@ open http://localhost:3000
 
 | 问题 | 原因 | 解决方案 |
 |------|------|----------|
-| Cannot connect to Feishu | App ID/Secret 错误 | 检查凭证是否正确 |
+| Cannot connect to Lark | App ID/Secret 错误 | 检查凭证是否正确 |
 | OpenCode process failed | opencode 未安装 | `npm install -g @anomaly/opencode` |
 | Port already in use | 端口被占用 | 修改 `bridgePort` 配置 |
 | Messages not forwarding | 权限不足 | 检查是否 @机器人 且已授予权限 |
 | Config not saved to workDir | workDir 路径错误或权限不足 | 检查工作目录是否存在并有写入权限 |
-
----
-
-## 贡献
-
-欢迎贡献代码！
-
-```bash
-# Fork 并克隆
-# 创建分支
-git checkout -b feature/your-feature
-# 提交更改
-git commit -m 'Add feature'
-# 推送并提交 PR
-git push origin feature/your-feature
-```
 
 ---
 
@@ -124,4 +139,4 @@ git push origin feature/your-feature
 
 ---
 
-<p align="center">Made with ❤️ for the Feishu and OpenCode community</p>
+<p align="center">Made with ❤️ for the Lark and OpenCode community</p>

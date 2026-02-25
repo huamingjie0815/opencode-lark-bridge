@@ -1,9 +1,9 @@
-# Feishu ↔ OpenCode Bridge
+# OpenCode ↔ Lark Bridge
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org/)
 
-A bridge tool connecting Feishu (Lark) messaging platform with OpenCode AI development environment. It receives Feishu messages in real-time via WebSocket, forwards them to OpenCode for processing, and sends responses back to Feishu.
+A bridge tool connecting Lark (Feishu) messaging platform with OpenCode AI development environment. It receives Lark messages in real-time via WebSocket, forwards them to OpenCode for processing, and sends responses back to Lark.
 
 [中文版](./README.md)
 
@@ -11,22 +11,52 @@ A bridge tool connecting Feishu (Lark) messaging platform with OpenCode AI devel
 
 ## Features
 
-- **Bidirectional Message Forwarding**: Automatically forward Feishu messages to OpenCode
-- **WebSocket Connection**: Real-time message reception using Feishu SDK
+- **Bidirectional Message Forwarding**: Automatically forward Lark messages to OpenCode
+- **WebSocket Connection**: Real-time message reception using Lark SDK
 - **OpenCode Process Management**: Automatic service start/stop
 - **Web Management UI**: Visual configuration and status monitoring
 - **Message Queue**: Supports message buffering to prevent loss
 
 ---
 
+## Installation
+
+```bash
+# Install globally
+npm install -g opencode-lark-bridge
+
+# Or use npx
+npx opencode-lark-bridge <command>
+```
+
+---
+
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `oclb start` | Start the bridge service |
+| `oclb start --daemon` | Start service in background |
+| `oclb stop` | Stop the bridge service |
+| `oclb status` | Check service status |
+| `oclb logs` | View logs |
+| `oclb logs -f` | Follow logs in real-time |
+| `oclb init` | Initialize configuration |
+| `oclb --help` | Show help |
+
+---
+
 ## Quick Start
 
 ```bash
-# Install dependencies
-npm install
+# Initialize configuration (interactive)
+oclb init
 
 # Start the service
-npm start
+oclb start
+
+# Or start in daemon mode
+oclb start --daemon
 
 # Open Web UI
 open http://localhost:3000
@@ -38,17 +68,18 @@ open http://localhost:3000
 
 | Config Item | Description | Required | Example |
 |-------------|-------------|----------|---------|
-| `feishuAppId` | Feishu App ID | Yes | `cli_xxx` |
-| `feishuAppSecret` | Feishu App Secret | Yes | `xxx` |
+| `feishuAppId` | Lark App ID | Yes | `cli_xxx` |
+| `feishuAppSecret` | Lark App Secret | Yes | `xxx` |
 | `workDir` | OpenCode workspace directory, **configuration will be saved here** | Yes | `/path/to/workspace` |
 | `bridgePort` | Web service port | No | `3000` |
+
 > **Important Change**: Configuration files are now saved in the **workspace directory** (`{workDir}/.config.json`), with independent configurations for each workspace.
 
 ---
 
-## Feishu App Setup
+## Lark App Setup
 
-1. Login to [Feishu Open Platform](https://open.feishu.cn/)
+1. Login to [Lark Open Platform](https://open.feishu.cn/)
 2. **Create App** → **Enterprise Self-built App**
 3. Add **Bot** capability
 4. Get **App ID** and **App Secret**
@@ -61,18 +92,18 @@ open http://localhost:3000
 
 ```
 ┌─────────────────┐      WebSocket       ┌──────────────────┐      HTTP/SSE       ┌─────────────────┐
-│   Feishu App    │ ◄──────────────────► │  Bridge Server   │ ◄──────────────────► │   OpenCode      │
+│   Lark App      │ ◄──────────────────► │  Bridge Server   │ ◄──────────────────► │   OpenCode      │
 └─────────────────┘                      └──────────────────┘                      └─────────────────┘
-                                                  │
-                                                  ▼
-                                         ┌──────────────────┐
-                                         │   Web UI (3000)  │
-                                         └──────────────────┘
+                                              │
+                                              ▼
+                                     ┌──────────────────┐
+                                     │   Web UI (3000)  │
+                                     └──────────────────┘
 ```
 
 **Data Flow**:
-1. Feishu → WebSocket → Bridge → OpenCode
-2. OpenCode → SSE/HTTP → Bridge → Feishu API
+1. Lark → WebSocket → Bridge → OpenCode
+2. OpenCode → SSE/HTTP → Bridge → Lark API
 
 ---
 
@@ -92,27 +123,11 @@ open http://localhost:3000
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| Cannot connect to Feishu | Wrong App ID/Secret | Check credentials |
+| Cannot connect to Lark | Wrong App ID/Secret | Check credentials |
 | OpenCode process failed | opencode not installed | `npm install -g @anomaly/opencode` |
 | Port already in use | Port occupied | Modify `bridgePort` config |
 | Messages not forwarding | Insufficient permissions | Check if @bot and permissions granted |
 | Config not saved to workDir | Incorrect workDir path or insufficient permissions | Check if workspace directory exists and has write permissions |
-
----
-
-## Contributing
-
-Contributions are welcome!
-
-```bash
-# Fork and clone
-# Create branch
-git checkout -b feature/your-feature
-# Commit changes
-git commit -m 'Add feature'
-# Push and submit PR
-git push origin feature/your-feature
-```
 
 ---
 
@@ -122,4 +137,4 @@ git push origin feature/your-feature
 
 ---
 
-<p align="center">Made with ❤️ for the Feishu and OpenCode community</p>
+<p align="center">Made with ❤️ for the Lark and OpenCode community</p>

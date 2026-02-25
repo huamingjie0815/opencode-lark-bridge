@@ -274,16 +274,7 @@ async function handleFeishuToOpenCode(message) {
 
     if (logger) logger('info', `Feishu → OpenCode: ${text.substring(0, 100)}...`, { chatId, userId });
 
-    // 发送"正在输入"状态到飞书
-    try {
-      if (feishu.sendTypingStatus) {
-        await feishu.sendTypingStatus(chatId);
-        if (logger) logger('info', `Sent typing status to Feishu chat ${chatId}`);
-      }
-    } catch (typingError) {
-      // 打字状态发送失败不应该阻塞主流程
-      if (logger) logger('warn', `Failed to send typing status: ${typingError.message}`);
-    }
+    // 注意：飞书没有 typing 状态 API，此功能已禁用
 
     if (!chatIdToSessionMap.has(chatId)) {
       try {
