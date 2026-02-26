@@ -368,6 +368,78 @@ class OpenCodeClient extends EventEmitter {
       processRunning: !!this.process && !this.process.killed
     };
   }
+
+  async getSessionStatus(sessionId) {
+    return new Promise((resolve, reject) => {
+      const { host, port } = this.config;
+
+      const options = {
+        hostname: host,
+        port: port,
+        path: `/session/${sessionId}`,
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      };
+
+      const req = http.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => data += chunk);
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              const response = JSON.parse(data);
+              resolve(response);
+            } catch (e) {
+              reject(new Error(`Failed to parse response: ${e.message}`));
+            }
+          } else {
+            reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+          }
+        });
+      });
+
+      req.on('error', reject);
+      req.end();
+    });
+  }
+
+  async getSessionTodo(sessionId) {
+    return new Promise((resolve, reject) => {
+      const { host, port } = this.config;
+
+      const options = {
+        hostname: host,
+        port: port,
+        path: `/session/${sessionId}/todo`,
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      };
+
+      const req = http.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => data += chunk);
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              const response = JSON.parse(data);
+              resolve(response);
+            } catch (e) {
+              reject(new Error(`Failed to parse response: ${e.message}`));
+            }
+          } else {
+            reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+          }
+        });
+      });
+
+      req.on('error', reject);
+      req.end();
+    });
+  }
 }
 
 const client = new OpenCodeClient();
@@ -382,5 +454,7 @@ module.exports = {
   off: (event, handler) => client.off(event, handler),
   getEventStream: () => client.getEventStream(),
   getState: () => client.getState(),
+  getSessionStatus: (sessionId) => client.getSessionStatus(sessionId),
+  getSessionTodo: (sessionId) => client.getSessionTodo(sessionId),
   _client: client
 };

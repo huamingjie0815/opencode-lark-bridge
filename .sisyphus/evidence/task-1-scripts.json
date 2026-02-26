@@ -1,1 +1,0 @@
-{"start": "node src/index.js", "dev": "node --watch src/index.js"}

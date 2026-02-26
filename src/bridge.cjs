@@ -43,11 +43,83 @@ const MESSAGE_ID_RETENTION_MS = 5 * 60 * 1000; // 5 minutes
 
 // OpenCode session status polling
 const sessionStatusMap = new Map(); // sessionId -> { status, lastUpdate, messageCount }
-const SESSION_STATUS_POLLING_INTERVAL = 3000; // 3 seconds
+const SESSION_STATUS_POLLING_INTERVAL = 60000; // 1 minute
 const SESSION_STATUS_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 let sessionStatusPollingInterval = null;
 
 // Session status polling functions
+
+// 检查会话是否已完成
+function isSessionCompleted(status) {
+  if (!status) return false;
+  // 检查各种可能的完成状态字段
+  const state = status.state || status.status || status.phase || '';
+  const stateLower = state.toLowerCase();
+  return (
+    stateLower === 'completed' ||
+    stateLower === 'done' ||
+    stateLower === 'finished' ||
+    stateLower === 'success' ||
+    status.done === true ||
+    status.completed === true
+  );
+}
+
+async function pollSessionStatus() {
+  for (const [sessionId, statusInfo] of sessionStatusMap.entries()) {
+    try {
+      // Check if session has timed out
+      if (Date.now() - statusInfo.lastUpdate > SESSION_STATUS_TIMEOUT) {
+        sessionStatusMap.delete(sessionId);
+        if (logger) logger('info', `Session ${sessionId} timed out and removed from polling`);
+        continue;
+      }
+
+      // Get session status from OpenCode
+      const status = await opencode.getSessionStatus(sessionId);
+
+      // 检查会话是否已完成，如果已完成则停止轮询
+      if (isSessionCompleted(status)) {
+        sessionStatusMap.delete(sessionId);
+        // 发送完成状态到飞书
+        await sendStatusToFeishu(sessionId, { ...status, completed: true });
+        if (logger) logger('info', `Session ${sessionId} completed, stopped polling`);
+        continue;
+      }
+
+      // Extract summary and time for comparison
+      const currentSummary = status?.summary || { additions: 0, deletions: 0, files: 0 };
+      const currentTimeUpdated = status?.time?.updated || 0;
+      const lastSummary = statusInfo.lastSummary || { additions: 0, deletions: 0, files: 0 };
+
+      // Check if status has substantive changes - compare summary and time.updated
+      const hasStatusChanged = !statusInfo.status ||
+        currentSummary.additions !== lastSummary.additions ||
+        currentSummary.deletions !== lastSummary.deletions ||
+        currentSummary.files !== lastSummary.files ||
+        currentTimeUpdated !== statusInfo.lastTimeUpdated;
+
+      if (logger) logger('debug', `Polled status for session ${sessionId}: ${JSON.stringify(status)}`);
+
+      // Update status in map
+      statusInfo.status = status;
+      statusInfo.lastSummary = currentSummary;
+      statusInfo.lastTimeUpdated = currentTimeUpdated;
+      statusInfo.lastUpdate = Date.now();
+
+      // Only send update if status changed
+      if (hasStatusChanged) {
+        await sendStatusToFeishu(sessionId, status);
+        if (logger) logger('info', `Status changed for session ${sessionId}, sent Feishu update`);
+      } else {
+        if (logger) logger('debug', `Status unchanged for session ${sessionId}, skipping Feishu update`);
+      }
+
+    } catch (error) {
+      if (logger) logger('error', `Failed to poll status for session ${sessionId}: ${error.message}`);
+    }
+  }
+}
 async function pollSessionStatus() {
   for (const [sessionId, statusInfo] of sessionStatusMap.entries()) {
     try {
@@ -603,6 +675,9 @@ async function start(config) {
 
       setInterval(processQueue, 5000);
 
+      // 启动会话状态轮询
+      startSessionStatusPolling();
+
       if (logger) logger('success', 'Bridge started successfully');
       resolve();
 
@@ -627,6 +702,12 @@ async function stop() {
   setStatus(STATUS.IDLE);
   
   clear();
+  chatIdToSessionMap.clear();
+  sessionStatusMap.clear(); // 清除会话状态轮询
+  sessionId = null;
+
+  // 停止会话状态轮询
+  stopSessionStatusPolling();
   chatIdToSessionMap.clear();
   sessionId = null;
   
